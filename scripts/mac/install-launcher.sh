@@ -1,34 +1,25 @@
 #!/bin/zsh
 #
-# Put a LearnHarness icon on the Desktop (and in Applications) that runs
-# scripts/mac/launch.sh: pull the latest code, then start or restart the
-# app. Run once from the clone:  zsh scripts/mac/install-launcher.sh
-# Re-run it if you move the clone.
+# Install LearnHarness.app in ~/Applications: click it (or keep it in the
+# Dock) to pull the latest code and start or restart the app. Run once from
+# the clone, in Terminal:  zsh scripts/mac/install-launcher.sh
+# Re-run it after moving the clone, or when the launcher says Electron was
+# updated.
 
 set -eu
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-LAUNCH="$REPO/scripts/mac/launch.sh"
-chmod +x "$LAUNCH"
+chmod +x "$REPO/scripts/mac/launch.sh"
+[[ -d "$REPO/node_modules" ]] || (cd "$REPO" && npm install)
 
-build_app() {
-	local app="$1"
-	rm -rf "$app"
-	osacompile -o "$app" -e "do shell script quoted form of \"$LAUNCH\" & \" > /dev/null 2>&1 &\""
-	# Newer macOS draws an applet's icon from Assets.car (CFBundleIconName),
-	# not applet.icns: drop both so the LearnHarness icon file wins.
-	cp "$REPO/build/icon.icns" "$app/Contents/Resources/applet.icns"
-	rm -f "$app/Contents/Resources/Assets.car"
-	/usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$app/Contents/Info.plist" 2>/dev/null || true
-	/usr/libexec/PlistBuddy -c "Set :CFBundleIconFile applet" "$app/Contents/Info.plist" 2>/dev/null \
-		|| /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string applet" "$app/Contents/Info.plist"
-	codesign --force --deep --sign - "$app" >/dev/null 2>&1 || true
-	touch "$app"
-	/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app" >/dev/null 2>&1 || true
-	echo "made $app"
-}
-
-build_app "$HOME/Desktop/LearnHarness.app"
 mkdir -p "$HOME/Applications"
-build_app "$HOME/Applications/LearnHarness.app"
+zsh "$REPO/scripts/mac/brand-electron.sh" "$REPO" "$HOME/Applications/LearnHarness.app"
+
+# The first launcher was a script applet on the Desktop; it still works,
+# but one app is enough.
+if [[ -d "$HOME/Desktop/LearnHarness.app" && -f "$HOME/Desktop/LearnHarness.app/Contents/Resources/Scripts/main.scpt" ]]; then
+	rm -rf "$HOME/Desktop/LearnHarness.app" && echo "removed the old Desktop launcher"
+fi
+
 killall Dock 2>/dev/null || true # redraw cached icons
-echo "Double-click LearnHarness on your Desktop to start it. Drag it to the Dock to keep it there."
+open -R "$HOME/Applications/LearnHarness.app"
+echo "Done. Drag LearnHarness from the Finder window that just opened into your Dock, and click it to start."

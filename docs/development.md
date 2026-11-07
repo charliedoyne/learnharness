@@ -106,4 +106,6 @@ Run checks proportionate to the change. Offline gates prove exercised contracts,
 
 ## Desktop icon (macOS)
 
-`zsh scripts/mac/install-launcher.sh` puts a **LearnHarness** icon on the Desktop and in `~/Applications`. Each click stops a copy already running from this clone, pulls the latest `main` from `origin`, runs `npm install` if the lockfile changed, starts `next dev`, waits for the first page to compile, then opens the Electron window. Data and keys live in `~/Library/Application Support/LearnHarness` (`LH_DATA_DIR`, `LH_AUTH_FILE`), so updating or restarting never touches them. Closing the window quits the app. The log is `~/Library/Logs/LearnHarness/launcher.log`.
+`zsh scripts/mac/install-launcher.sh` (run in Terminal) builds `~/Applications/LearnHarness.app`: a renamed copy of this clone's Electron with the LearnHarness icon. Keep it in the Dock. Each click stops a copy already running from this clone, pulls the latest `main` from `origin`, runs `npm install` if the lockfile changed, starts `next dev`, waits for the first page to compile, then opens the window. Data and keys live in `~/Library/Application Support/LearnHarness` (`LH_DATA_DIR`, `LH_AUTH_FILE`), so updating or restarting never touches them. Closing the window quits the app. The log is `~/Library/Logs/LearnHarness/launcher.log`.
+
+The launcher never writes into an app bundle: macOS blocks that for apps without App Management permission. When an update brings a new Electron, it says so; run `install-launcher.sh` again to rebuild the app.

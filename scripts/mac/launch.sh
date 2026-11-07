@@ -40,10 +40,18 @@ cd "$REPO" || fail "The LearnHarness folder is missing: $REPO"
 
 # 1. Stop a copy already running from this clone (Next dev, Electron and
 #    concurrently all run from this clone's node_modules).
-if pkill -f "$REPO/node_modules/" ; then
+# The window's Electron runs from ~/Applications with this clone as its
+# argument; Next and the helpers run from this clone's node_modules.
+stop_running() {
+	local a=1 b=1
+	pkill "$@" -f "$REPO/node_modules/" && a=0
+	pkill "$@" -f "LearnHarness.app/Contents/MacOS/Electron $REPO" && b=0
+	(( a == 0 || b == 0 ))
+}
+if stop_running ; then
 	echo "stopped the running copy"
-	for _ in {1..20}; do pgrep -f "$REPO/node_modules/" >/dev/null || break; sleep 0.5; done
-	pkill -9 -f "$REPO/node_modules/" 2>/dev/null
+	for _ in {1..20}; do pgrep -f "$REPO/node_modules/" >/dev/null || pgrep -f "LearnHarness.app/Contents/MacOS/Electron $REPO" >/dev/null || break; sleep 0.5; done
+	stop_running -9 2>/dev/null
 fi
 
 # 2. Latest code.
@@ -63,48 +71,23 @@ if [[ ! -d node_modules || "$(shasum package-lock.json 2>/dev/null)" != "$lock_b
 	npm install || fail "npm install failed."
 fi
 
-# 3b. The dev window runs the stock Electron.app from node_modules, which
-#     shows as "Electron" in the Dock (the Dock names a running app after
-#     its bundle folder). Keep a renamed copy, LearnHarness.app, with the
-#     LearnHarness icon, rebuilt whenever npm installs a new Electron, and
-#     re-signed ad hoc since Apple silicon refuses an edited bundle.
-#     Its Resources/app makes the copy safe to keep in the Dock: opened on
-#     its own it runs this launcher; opened by this launcher it loads
-#     LearnHarness's electron/main.cjs.
-DIST="$REPO/node_modules/electron/dist"
-BRANDED="$DIST/LearnHarness.app"
-STAMP="$BRANDED/Contents/lh-electron-version"
-BRAND_REV=2 # bump when the branded copy's contents change
-ELECTRON_VERSION="$(node -p "require('$REPO/node_modules/electron/package.json').version" 2>/dev/null)-$BRAND_REV-$REPO"
-if [[ -d "$DIST/Electron.app" && "$(cat "$STAMP" 2>/dev/null)" != "$ELECTRON_VERSION" ]]; then
-	rm -rf "$BRANDED"
-	ditto "$DIST/Electron.app" "$BRANDED"
-	PLIST="$BRANDED/Contents/Info.plist"
-	cp "$REPO/build/icon.icns" "$BRANDED/Contents/Resources/electron.icns"
-	mkdir -p "$BRANDED/Contents/Resources/app"
-	printf '{ "name": "learnharness-dock", "main": "main.cjs" }\n' > "$BRANDED/Contents/Resources/app/package.json"
-	cat > "$BRANDED/Contents/Resources/app/main.cjs" <<JS
-// Written by scripts/mac/launch.sh.
-const REPO = $(node -p "JSON.stringify(process.argv[1])" "$REPO");
-if (process.env.LH_DEV_URL || process.argv.includes("--browser-service")) {
-	require(REPO + "/electron/main.cjs");
-} else {
-	const { app } = require("electron");
-	require("node:child_process").spawn(REPO + "/scripts/mac/launch.sh", [], { detached: true, stdio: "ignore" }).unref();
-	app.dock?.hide();
-	app.quit();
-}
-JS
-	/usr/libexec/PlistBuddy -c "Set :CFBundleName LearnHarness" "$PLIST"
-	/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName LearnHarness" "$PLIST" 2>/dev/null \
-		|| /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string LearnHarness" "$PLIST"
-	codesign --force --deep --sign - "$BRANDED" || echo "codesign failed"
-	echo "$ELECTRON_VERSION" > "$STAMP"
-	/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$BRANDED" >/dev/null 2>&1 || true
-	echo "built LearnHarness.app from Electron $ELECTRON_VERSION"
-fi
+# 3b. The window runs as ~/Applications/LearnHarness.app (a renamed
+#     Electron with the LearnHarness icon, built by install-launcher.sh
+#     from Terminal). This script NEVER writes into an app bundle: macOS
+#     blocks that for apps without App Management permission ("LearnHarness
+#     was prevented from modifying apps"). Without the app, the stock
+#     Electron runs (it shows as "Electron").
+BRANDED="$HOME/Applications/LearnHarness.app"
 ELECTRON_BIN="$BRANDED/Contents/MacOS/Electron"
-[[ -x "$ELECTRON_BIN" ]] || ELECTRON_BIN="$REPO/node_modules/.bin/electron"
+if [[ -x "$ELECTRON_BIN" ]]; then
+	built="$(cat "$HOME/Library/Application Support/LearnHarness/launcher-electron-version" 2>/dev/null)"
+	current="$(node -p "require('$REPO/node_modules/electron/package.json').version" 2>/dev/null)"
+	if [[ -n "$current" && "$built" != "$current" ]]; then
+		notify "Electron was updated. Run scripts/mac/install-launcher.sh in Terminal once to refresh the app."
+	fi
+else
+	ELECTRON_BIN="$REPO/node_modules/.bin/electron"
+fi
 
 # 4. Start, detached from this script. Next first; the window only once
 #    the first page has compiled (Electron's dev shell loads its URL once,
