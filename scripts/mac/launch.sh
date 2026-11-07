@@ -8,7 +8,7 @@
 #   2. pulls the latest main from origin (skipped, with a notice, if the
 #      clone has local changes or no network)
 #   3. runs npm install when package-lock.json changed
-#   4. starts `npm run desktop:dev` in the background; closing the window
+#   4. starts Next, waits for it, then opens the window; closing the window
 #      quits it
 #
 # Data and keys stay where they always were (Application Support), so a
@@ -63,7 +63,19 @@ if [[ ! -d node_modules || "$(shasum package-lock.json 2>/dev/null)" != "$lock_b
 	npm install || fail "npm install failed."
 fi
 
-# 4. Start, detached from this script.
-notify "Starting…"
-nohup npm run desktop:dev >>"$LOG" 2>&1 &
-echo "started (pid $!)"
+# 4. Start, detached from this script. Next first; the window only once
+#    the first page has compiled (Electron's dev shell loads its URL once,
+#    so an early window stays blank). Closing the window stops Next.
+notify "Starting… the window opens when it's ready (first start can take a minute)."
+URL="http://localhost:3000"
+(
+	"$REPO/node_modules/.bin/next" dev >>"$LOG" 2>&1 &
+	for _ in {1..90}; do
+		curl -s -o /dev/null --max-time 180 "$URL" && break
+		sleep 2
+	done
+	LH_DEV_URL="$URL" "$REPO/node_modules/.bin/electron" "$REPO" >>"$LOG" 2>&1
+	pkill -f "$REPO/node_modules/" 2>/dev/null
+) </dev/null >/dev/null 2>&1 &
+disown
+echo "started"
