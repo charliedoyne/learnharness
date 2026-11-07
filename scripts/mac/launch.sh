@@ -68,15 +68,33 @@ fi
 #     its bundle folder). Keep a renamed copy, LearnHarness.app, with the
 #     LearnHarness icon, rebuilt whenever npm installs a new Electron, and
 #     re-signed ad hoc since Apple silicon refuses an edited bundle.
+#     Its Resources/app makes the copy safe to keep in the Dock: opened on
+#     its own it runs this launcher; opened by this launcher it loads
+#     LearnHarness's electron/main.cjs.
 DIST="$REPO/node_modules/electron/dist"
 BRANDED="$DIST/LearnHarness.app"
 STAMP="$BRANDED/Contents/lh-electron-version"
-ELECTRON_VERSION="$(node -p "require('$REPO/node_modules/electron/package.json').version" 2>/dev/null)"
+BRAND_REV=2 # bump when the branded copy's contents change
+ELECTRON_VERSION="$(node -p "require('$REPO/node_modules/electron/package.json').version" 2>/dev/null)-$BRAND_REV-$REPO"
 if [[ -d "$DIST/Electron.app" && "$(cat "$STAMP" 2>/dev/null)" != "$ELECTRON_VERSION" ]]; then
 	rm -rf "$BRANDED"
 	ditto "$DIST/Electron.app" "$BRANDED"
 	PLIST="$BRANDED/Contents/Info.plist"
 	cp "$REPO/build/icon.icns" "$BRANDED/Contents/Resources/electron.icns"
+	mkdir -p "$BRANDED/Contents/Resources/app"
+	printf '{ "name": "learnharness-dock", "main": "main.cjs" }\n' > "$BRANDED/Contents/Resources/app/package.json"
+	cat > "$BRANDED/Contents/Resources/app/main.cjs" <<JS
+// Written by scripts/mac/launch.sh.
+const REPO = $(node -p "JSON.stringify(process.argv[1])" "$REPO");
+if (process.env.LH_DEV_URL || process.argv.includes("--browser-service")) {
+	require(REPO + "/electron/main.cjs");
+} else {
+	const { app } = require("electron");
+	require("node:child_process").spawn(REPO + "/scripts/mac/launch.sh", [], { detached: true, stdio: "ignore" }).unref();
+	app.dock?.hide();
+	app.quit();
+}
+JS
 	/usr/libexec/PlistBuddy -c "Set :CFBundleName LearnHarness" "$PLIST"
 	/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName LearnHarness" "$PLIST" 2>/dev/null \
 		|| /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string LearnHarness" "$PLIST"
