@@ -404,7 +404,7 @@ export const NOTES_PREAMBLE =
 export const EXTRACTION_CORE = {
 	entailment: `Each chain is premises that JOINTLY entail a conclusion. Entailment is the only link that earns a
 chain — where the real connection is historical or narrative (who argued what, how a debate or
-exposition unfolds), there is no chain; keep the pieces as bare ideas or drop them. The direction of
+exposition unfolds), there is no chain; keep the pieces as bare ideas. The direction of
 the graph is upward: foundational ideas at the bottom, derived ideas above them, each chain showing
 how its conclusion follows from what is more established — do not submit connections that carry no
 derivation.`,
@@ -415,6 +415,13 @@ correction. Each statement is one self-contained idea at full precision.`,
 alone for a reader who never saw this source: names and statements may not lean on the source's own
 scaffolding (claim numbering, axiom tags, arc labels); a claim that only matters as part of how this
 document is organized is not knowledge — drop it.`,
+	coverage: `COVER THE WHOLE STRETCH EVENLY. Every section, period, or subtopic the stretch treats gets its key
+ideas recorded, in proportion to how much the source says about it: a passage the source dwells on does
+not earn ten ideas while a section it moves through quickly gets none. Record each distinct fact,
+definition, event, or claim the source states as its own idea (merge only true restatements), and do
+not split one idea into near-duplicates. In historical or descriptive material the key facts are
+knowledge in their own right (who, what, when, where, and why it mattered): record them as bare ideas
+even though nothing derives them, with their dates, places and numbers.`,
 	continuation: `When the prompt carries THE GRAPH SO FAR, you are continuing a source already partly extracted: build
 on it. Reference an existing idea by its id ("n_…") instead of restating it, and prefer chains that
 lean on established conclusions as premises — derive new material from what is already derived. Do
@@ -429,7 +436,7 @@ arguments. The tool's field descriptions carry the details.`,
 } as const;
 
 function composeExtractionInstructions(preamble: string, goal: string, selection: string): string {
-	return `${preamble}\n\n${goal}\n${EXTRACTION_CORE.entailment}\n\n${EXTRACTION_CORE.knowledge}\n\n${selection} ${EXTRACTION_CORE.standalone}\n\n${EXTRACTION_CORE.continuation}\n\n${EXTRACTION_CORE.submission}`;
+	return `${preamble}\n\n${goal}\n${EXTRACTION_CORE.entailment}\n\n${EXTRACTION_CORE.knowledge}\n\n${selection} ${EXTRACTION_CORE.standalone}\n\n${EXTRACTION_CORE.coverage}\n\n${EXTRACTION_CORE.continuation}\n\n${EXTRACTION_CORE.submission}`;
 }
 
 // Each front door owns its goal and selection wording independently of the
@@ -440,8 +447,9 @@ export const EXTRACTOR_INSTRUCTIONS = `${composeExtractionInstructions(
 source teaches by arguing — ideas worked out from other ideas, down to a foundation the rest stands on.
 Your deliverable is twofold: the core ideas themselves, and the chains of reasoning that derive them.`,
 	`Extract the load-bearing ideas of the subject — what a reference on it would teach — not the full run
-of the discourse. An idea earns its place only when the source's arguments run through it — examples,
-notation glosses, and restatements that no argument needs are not core ideas.`,
+of the discourse. Ideas the source's arguments run through are core; so are the key facts the session
+teaches (people, places, dates, events, and their causes and effects), even when no argument needs them.
+Examples, notation glosses, and restatements are not core ideas.`,
 )}\n\n${SESSION_MESSAGE_ID_RULE}`;
 
 export const NOTES_EXTRACTOR_INSTRUCTIONS = composeExtractionInstructions(

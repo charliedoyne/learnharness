@@ -1452,6 +1452,8 @@ describe("the extractor redesign (owner, 2026-09-30): chains are the deliverable
 		assert.match(sharedRules, /SUBMIT with one submit_findings call/);
 		assert.match(sharedRules, /"chains": \[\] when the source makes no\s+arguments/);
 		assert.match(sharedRules, /build\s+on it\./);
+		assert.match(sharedRules, /COVER THE WHOLE STRETCH EVENLY/);
+		assert.match(sharedRules, /historical or descriptive material the key facts are\s+knowledge/);
 		assert.doesNotMatch(sharedRules, /THE GOAL:|source teaches by arguing|Extract the load-bearing ideas/);
 
 		// Both front doors still receive every shared contract, but own their
@@ -1494,9 +1496,10 @@ describe("the extractor redesign (owner, 2026-09-30): chains are the deliverable
 	it("preserves the complete teaching-session prompt byte-for-byte", () => {
 		// Original UTF-8 snapshot, including every newline, preamble and the
 		// session-only anchor rule. Notes-only changes must not alter it.
+		// Re-pinned (fork, 2026-11-07): even-coverage rule + key facts kept.
 		assert.equal(
 			createHash("sha256").update(EXTRACTOR_INSTRUCTIONS, "utf8").digest("hex"),
-			"a8bddd7d47130ed5e39ffe7d8d0ed6efdd6b30407d52cd9838e7be2e465089a6",
+			"dd343d8ca82dfbe8e07e2316e00270449daee5fcccc0f3324761a907db6049c5",
 		);
 	});
 
@@ -2143,7 +2146,7 @@ describe("digest-aware serialized extraction (the extractor is the assembler)", 
 		assert.match(EXTRACTION_CORE.continuation, /build\s+on it\. Reference an existing idea by its id/);
 		assert.match(EXTRACTION_CORE.submission, /OR existing ids from THE GRAPH SO FAR, verbatim/);
 		assert.match(EXTRACTOR_INSTRUCTIONS, /THE GOAL: uncover the source's CORE IDEAS and show how everything derives from the foundations/);
-		assert.match(EXTRACTOR_INSTRUCTIONS, /examples,\s+notation glosses, and restatements that no argument needs are not core ideas/);
+		assert.match(EXTRACTOR_INSTRUCTIONS, /Examples, notation glosses, and restatements are not core ideas/);
 		for (const prompt of [EXTRACTOR_INSTRUCTIONS, NOTES_EXTRACTOR_INSTRUCTIONS]) {
 			for (const section of Object.values(EXTRACTION_CORE)) assert.ok(prompt.includes(section));
 		}
