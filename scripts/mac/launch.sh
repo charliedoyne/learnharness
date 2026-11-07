@@ -64,21 +64,29 @@ if [[ ! -d node_modules || "$(shasum package-lock.json 2>/dev/null)" != "$lock_b
 fi
 
 # 3b. The dev window runs the stock Electron.app from node_modules, which
-#     would show as "Electron" with Electron's icon. Rename it and give it
-#     the LearnHarness icon (redone after each npm install, which resets it),
-#     then re-sign it ad hoc, since Apple silicon refuses an edited bundle.
-ELECTRON_APP="$REPO/node_modules/electron/dist/Electron.app"
-PLIST="$ELECTRON_APP/Contents/Info.plist"
-if [[ -f "$PLIST" && "$(/usr/libexec/PlistBuddy -c "Print :CFBundleName" "$PLIST" 2>/dev/null)" != "LearnHarness" ]]; then
-	cp "$REPO/build/icon.icns" "$ELECTRON_APP/Contents/Resources/electron.icns"
+#     shows as "Electron" in the Dock (the Dock names a running app after
+#     its bundle folder). Keep a renamed copy, LearnHarness.app, with the
+#     LearnHarness icon, rebuilt whenever npm installs a new Electron, and
+#     re-signed ad hoc since Apple silicon refuses an edited bundle.
+DIST="$REPO/node_modules/electron/dist"
+BRANDED="$DIST/LearnHarness.app"
+STAMP="$BRANDED/Contents/lh-electron-version"
+ELECTRON_VERSION="$(node -p "require('$REPO/node_modules/electron/package.json').version" 2>/dev/null)"
+if [[ -d "$DIST/Electron.app" && "$(cat "$STAMP" 2>/dev/null)" != "$ELECTRON_VERSION" ]]; then
+	rm -rf "$BRANDED"
+	ditto "$DIST/Electron.app" "$BRANDED"
+	PLIST="$BRANDED/Contents/Info.plist"
+	cp "$REPO/build/icon.icns" "$BRANDED/Contents/Resources/electron.icns"
 	/usr/libexec/PlistBuddy -c "Set :CFBundleName LearnHarness" "$PLIST"
 	/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName LearnHarness" "$PLIST" 2>/dev/null \
 		|| /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string LearnHarness" "$PLIST"
-	codesign --force --deep --sign - "$ELECTRON_APP" || echo "codesign failed"
-	touch "$ELECTRON_APP"
-	/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$ELECTRON_APP" >/dev/null 2>&1 || true
-	echo "branded Electron.app"
+	codesign --force --deep --sign - "$BRANDED" || echo "codesign failed"
+	echo "$ELECTRON_VERSION" > "$STAMP"
+	/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$BRANDED" >/dev/null 2>&1 || true
+	echo "built LearnHarness.app from Electron $ELECTRON_VERSION"
 fi
+ELECTRON_BIN="$BRANDED/Contents/MacOS/Electron"
+[[ -x "$ELECTRON_BIN" ]] || ELECTRON_BIN="$REPO/node_modules/.bin/electron"
 
 # 4. Start, detached from this script. Next first; the window only once
 #    the first page has compiled (Electron's dev shell loads its URL once,
@@ -91,7 +99,7 @@ URL="http://localhost:3000"
 		curl -s -o /dev/null --max-time 180 "$URL" && break
 		sleep 2
 	done
-	LH_DEV_URL="$URL" "$REPO/node_modules/.bin/electron" "$REPO" >>"$LOG" 2>&1
+	LH_DEV_URL="$URL" "$ELECTRON_BIN" "$REPO" >>"$LOG" 2>&1
 	pkill -f "$REPO/node_modules/" 2>/dev/null
 ) </dev/null >/dev/null 2>&1 &
 disown
