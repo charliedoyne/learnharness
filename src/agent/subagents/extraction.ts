@@ -148,9 +148,10 @@ const propositionProps = {
 	id: Type.String({ description: 'Local id: "p1", "p2", … — referenced by chains in this call.' }),
 	name: Type.String({
 		description:
-			"A very short label — established terminology, the term the discipline itself uses, a glossary " +
-			"headword a textbook would print ('Will to power', 'Divine command theory'). Not a sentence, " +
-			"needn't be unique or self-contained: this becomes the node's global label in the graph.",
+			"A short title (2 to 8 words) that makes sense ON ITS OWN, read months later with no context: " +
+			"the established term where the discipline has one ('Will to power', 'Divine command theory'), " +
+			"otherwise who/what/where in brief ('Brownes refused Berlin's offer for the Mycenae columns', " +
+			"not 'Berlin offer refused'). Not a full sentence; this becomes the node's global label in the graph.",
 	}),
 	statement: Type.String({
 		description:
@@ -183,6 +184,11 @@ const chainSchema = Type.Object({
 			"Premise ids used TOGETHER: they jointly entail the conclusion; independent reasons are separate chains.",
 	}),
 	conclusion: endpoint("conclusion is"),
+	why: Type.Optional(Type.String({
+		description:
+			"One plain sentence (at most 25 words) saying HOW the premises together give the conclusion — " +
+			"the link a reader needs to see why it follows.",
+	})),
 });
 
 // Weak-model tolerance (owner, 2026-09-25): the old zod `.default([])` /

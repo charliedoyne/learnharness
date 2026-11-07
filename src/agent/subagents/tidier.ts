@@ -20,7 +20,7 @@ below by the topic (lesson or notes) they came from, plus reasoning chains: prem
 conclusion. The learner values one thing above all: how different topics CONNECT, so that knowing one
 flows naturally into another. Propose changes; the learner accepts or skips each one.
 
-Three kinds of change:
+Four kinds of change:
 
 MERGE: two ideas say the SAME thing in different words (often from different topics). Keep the clearer,
 better-established one. Merge only true equivalents. Two ideas that are merely related, or where one is
@@ -41,8 +41,13 @@ interesting link a thoughtful reader would draw ("Compensation paid to slave-own
 same West India merchants who had built the West India Docks"). Never invent facts the premises do not
 support; never connect ideas merely because they share a theme or a word.
 
+RENAME: an idea whose name does not make sense on its own ("Berlin offer refused", "The first
+policy"). Give a short title (2 to 8 words) a reader understands months later with no context: who,
+what, where, in brief ("Brownes refused Berlin's offer for the Mycenae columns"). Keep established
+terms ("Opportunity cost") as they are.
+
 Every connection must be true and earned, but do not stop at the first one: when topics share a
-subject, find each distinct link (up to 12 connections, 10 merges, 10 splits). An empty list is fine
+subject, find each distinct link (up to 12 connections, 10 merges, 10 splits, 20 renames). An empty list is fine
 only when the topics truly share nothing. Each change carries a one-line reason written for the learner. Use ids verbatim. Submit all
 changes in one submit_tidy call.`;
 
@@ -62,6 +67,11 @@ const submitSchema = Type.Object({
 		parts: Type.Array(ideaSchema, { minItems: 2, maxItems: 4 }),
 		reason: Type.String(),
 	}), { maxItems: 10 }),
+	renames: Type.Optional(Type.Array(Type.Object({
+		id: Type.String({ description: "The vaguely named idea's id." }),
+		name: Type.String({ description: "The clearer name (2 to 8 words)." }),
+		reason: Type.String(),
+	}), { maxItems: 20 })),
 	connections: Type.Array(Type.Object({
 		premises: Type.Array(Type.String(), { minItems: 1, maxItems: 4, description: "Existing ids, used jointly." }),
 		conclusion: Type.Optional(Type.String({ description: "An existing id the premises entail. Omit when giving newIdea." })),
@@ -102,12 +112,14 @@ export function tidierProposals(value: TidySubmit, nodes: ReadonlyMap<string, Gr
 	};
 	for (const m of value.merges) push({ kind: "merge", keep: m.keep, drop: m.drop }, m.reason);
 	for (const s of value.splits) push({ kind: "split", node: s.id, parts: s.parts }, s.reason);
+	for (const r of value.renames ?? []) push({ kind: "rename", node: r.id, name: r.name }, r.reason);
 	for (const c of value.connections) {
 		push({
 			kind: "connect",
 			premises: c.premises,
 			...(c.conclusion ? { conclusion: c.conclusion } : {}),
 			...(!c.conclusion && c.newIdea ? { newIdea: c.newIdea } : {}),
+			why: c.reason,
 		}, c.reason);
 	}
 	// One proposal per dropped node: a node folds into one keeper.
@@ -135,11 +147,12 @@ export async function runTidier(opts: {
 		toolName: "submit_tidy",
 		toolDescription: "Submit the proposed merges, splits and connections.",
 		parameters: submitSchema,
-		fill: (input: Partial<TidySubmit>) => ({ merges: input.merges ?? [], splits: input.splits ?? [], connections: input.connections ?? [] }),
+		fill: (input: Partial<TidySubmit>) => ({ merges: input.merges ?? [], splits: input.splits ?? [], renames: input.renames ?? [], connections: input.connections ?? [] }),
 		validate: (value) => {
 			for (const id of [
 				...value.merges.flatMap((m) => [m.keep, m.drop]),
 				...value.splits.map((s) => s.id),
+				...(value.renames ?? []).map((r) => r.id),
 				...value.connections.flatMap((c) => [...c.premises, ...(c.conclusion ? [c.conclusion] : [])]),
 			]) {
 				if (!byId.has(id)) return `unknown id "${id}" — use ids from the prompt verbatim`;

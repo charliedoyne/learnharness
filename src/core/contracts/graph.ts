@@ -47,6 +47,10 @@ export interface GraphChain {
 	premises: string[];
 	/** The node id the premises jointly imply. */
 	conclusion: string;
+	/** One sentence on HOW the premises give the conclusion (fork,
+	 *  2026-11-07): written by the extractor or the tidier, or filled in
+	 *  later by the chain explainer. Absent on older chains. */
+	why?: string;
 	/** Every (chat, message) point where this argument was asserted —
 	 *  unioned across assertion lines at read time. */
 	provenance: ProvenancePoint[];
@@ -253,6 +257,8 @@ export interface ExtractedChain {
 	premises: string[];
 	/** The proposition id the premises jointly imply. */
 	conclusion: string;
+	/** One sentence on how the premises give the conclusion. */
+	why?: string;
 }
 
 /** The extractor's output shape: the raw reasoning chains. */

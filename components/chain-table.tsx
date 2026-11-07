@@ -199,6 +199,8 @@ export function ChainTableBody({
 		sourceRecords.get(birth)?.label ?? sessions[birth] ?? (fileSources[birth] === undefined ? null : sourceFileLabel(fileSources[birth])), query),
 	[directory, sourceRecords, sessions, fileSources, query]);
 	const chains = useMemo(() => chainsForSelection(nodes, storedChains), [nodes, storedChains]);
+	// A chain's one-line "why" (GraphChain.why), shown when it is expanded.
+	const whyById = useMemo(() => new Map(storedChains.flatMap((c): Array<[string, string]> => (c.why ? [[c.id, c.why]] : []))), [storedChains]);
 	// Filter source groups, not global nodes: shared premises remain visible
 	// in teaching/notes groups. Keep the graph-wide header and pick set intact.
 	const sourceChains = useMemo(() => chains.filter((chain) =>
@@ -552,6 +554,12 @@ export function ChainTableBody({
 											    one statement in one click). PLAIN rows: the derivation
 											    is already encoded in the chain line — no conclusion
 											    marker down here. Deepest indent. */}
+											{chainOpen && whyById.get(chain.id) && (
+												<div data-testid={`chain-why-${chain.id}`} className="flex items-start gap-2 py-1 pl-21 pr-3">
+													<span aria-hidden="true" className="size-3.5 shrink-0" />
+													<span className="min-w-0 flex-1 text-xs italic leading-relaxed text-foreground/80">Why: {whyById.get(chain.id)}</span>
+												</div>
+											)}
 											{chainOpen &&
 												memberIds.map((id) => {
 													const node = byId.get(id);

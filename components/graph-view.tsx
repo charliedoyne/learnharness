@@ -1210,6 +1210,8 @@ export function GraphView({
 	// any element. Camera moves close the menu (it would float stale);
 	// the dismissal contract is the sidebar's (wave 6).
 	const [ctxNode, setCtxNode] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
+	/** The hovered chain's tooltip (edge hover): its id and the pointer. */
+	const [edgeTip, setEdgeTip] = useState<{ chainId: string; x: number; y: number } | null>(null);
 	const ctxAnchorRef = useRef<HTMLDivElement | null>(null);
 	const [deletingNode, setDeletingNode] = useState<{ id: string; name: string } | null>(null);
 	useEffect(() => {
@@ -1328,6 +1330,7 @@ export function GraphView({
 					});
 				},
 				onStageClick: () => setSelected(null),
+				onEdgeHover: (chainId, pos) => setEdgeTip(chainId === null ? null : { chainId, x: pos.x, y: pos.y }),
 				// Right-click → the node context menu (node interlude). Null
 				// (empty stage) closes a stale menu; a pick opens one anchored
 				// at the pointer. The name comes from the snapshot — what the
@@ -1398,6 +1401,7 @@ export function GraphView({
 			logicalEdges: snapshot.logicalEdges.map((e) => ({ from: e.from, to: e.to })),
 			impLinks: snapshot.impLinks,
 			clusters: snapshot.clusters.map((c) => ({ id: c.id, label: c.label, members: c.members })),
+			edgeChains: new Map(snapshot.chains.filter((c) => c.premises.length === 1).map((c) => [`${c.premises[0]}>${c.conclusion}`, c.id])),
 			colors: {
 				node: tokenHex(NODE_COLOR_TOKEN),
 				edge: tokenHex("--ring"),
@@ -1485,6 +1489,21 @@ export function GraphView({
 					{/* The context menu's anchor: a zero-size point at the
 					    right-click position (canvas-relative == container-relative,
 					    the canvas fills this div). */}
+					{edgeTip !== null && (() => {
+						const chain = snapshot?.chains.find((c) => c.id === edgeTip.chainId);
+						if (!chain) return null;
+						const name = (id: string) => snapshot?.propositions.find((n) => n.id === id)?.name ?? id;
+						return (
+							<div
+								data-testid="edge-tooltip"
+								className="pointer-events-none absolute z-20 max-w-80 rounded-lg border bg-popover px-2.5 py-1.5 text-xs shadow-md"
+								style={{ left: edgeTip.x + 12, top: edgeTip.y + 12 }}
+							>
+								<p className="text-foreground">{chain.premises.map(name).join(" + ")} ⟹ {name(chain.conclusion)}</p>
+								<p className="pt-0.5 text-muted-foreground">{chain.why ?? "No explanation yet: Tidy graph → Explain chains fills it in."}</p>
+							</div>
+						);
+					})()}
 					{ctxNode !== null && (
 						<div
 							ref={ctxAnchorRef}

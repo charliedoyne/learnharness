@@ -91,7 +91,7 @@ export function renderVault(input: VaultInput): Map<string, string> {
 		];
 		if (concluding.length > 0) {
 			lines.push("", "## Follows from");
-			for (const chain of concluding) lines.push(`- ${chain.premises.map(idea).join(" + ")}`);
+			for (const chain of concluding) lines.push(`- ${chain.premises.map(idea).join(" + ")}${chain.why ? `: ${chain.why}` : ""}`);
 		}
 		if (serving.length > 0) {
 			lines.push("", "## Leads to");

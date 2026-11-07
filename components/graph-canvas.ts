@@ -131,6 +131,9 @@ export interface CanvasData {
 	 *  the premises/conclusion midpoint (owner, 2026-09-30). */
 	impLinks?: ReadonlyArray<{ id: string; premises: ReadonlyArray<string>; conclusion: string }>;
 	clusters: CanvasCluster[];
+	/** Which chain a single-premise arrow draws, keyed "from>to" (an imp
+	 *  node's arrows carry their chain in the imp id). For edge hover. */
+	edgeChains?: ReadonlyMap<string, string>;
 	colors: CanvasColors;
 	/** Body font family (labels must match the app typography). */
 	fontFamily: string;
@@ -145,6 +148,9 @@ export interface RendererCallbacks {
 	onContext: (nodeId: string | null, screenPos: Pt) => void;
 	/** The empty stage was clicked. */
 	onStageClick: () => void;
+	/** The pointer is over a chain's arrow (chain id), or left it (null).
+	 *  Fired on every move while over one, so a tooltip can follow. */
+	onEdgeHover?: (chainId: string | null, screenPos: Pt) => void;
 	/** Any camera move (pan/zoom) — the caller dismisses anchored UI and
 	 *  persists the camera (view state). */
 	onCameraMove: (transform: { k: number; x: number; y: number }) => void;
@@ -287,6 +293,16 @@ export const LABELS_FADE_RATIO = 0.5;
 const GLOW_SCALE = 1.7; // halo outer radius = node radius x this (proportional, like blurring a copy of the disc)
 const GLOW_ALPHA = 0.3; // halo opacity at the disc edge, fading outward
 const HOVER_FADE_MS = 180; // hover halo opacity fade length
+const EDGE_PICK_PX = 6; // an arrow is hovered within this many screen pixels
+
+/** Distance from (px,py) to the segment (ax,ay)–(bx,by), screen pixels. */
+export function segmentDistance(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+	const dx = bx - ax;
+	const dy = by - ay;
+	const len2 = dx * dx + dy * dy;
+	const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+	return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
 const ZOOM_EASE_MS = 45; // wheel-zoom glide: exponential-ease time constant (~250ms per notch)
 
 /** Extra pickable radius (px) beyond the disc — the whole halo is
@@ -954,7 +970,33 @@ export class GraphCanvasRenderer {
 		const node = this.pickAt(pos.x, pos.y);
 		if ((node?.id ?? null) !== this.hoverId) this.setHover(node?.id ?? null);
 		this.canvas.style.cursor = node ? "pointer" : "";
+		const chain = node ? null : this.pickEdgeChain(pos.x, pos.y);
+		if (chain !== null || this.hoverEdgeChain !== null) this.callbacks.onEdgeHover?.(chain, pos);
+		this.hoverEdgeChain = chain;
 	};
+
+	private hoverEdgeChain: string | null = null;
+
+	/** The chain whose arrow passes within a few pixels of the pointer. */
+	private pickEdgeChain(px: number, py: number): string | null {
+		if (!this.data) return null;
+		const { x: tx, y: ty, k } = this.transform;
+		let best: string | null = null;
+		let bestDist = EDGE_PICK_PX;
+		for (const e of this.data.edges) {
+			if (this.visible && (!this.visible.has(e.from) || !this.visible.has(e.to))) continue;
+			const a = this.nodeById.get(e.from);
+			const b = this.nodeById.get(e.to);
+			if (!a || !b) continue;
+			const d = segmentDistance(px, py, a.x * k + tx, a.y * k + ty, b.x * k + tx, b.y * k + ty);
+			if (d >= bestDist) continue;
+			const chain = isImpNodeId(e.to) ? e.to : isImpNodeId(e.from) ? e.from : this.data.edgeChains?.get(`${e.from}>${e.to}`);
+			if (!chain) continue;
+			best = chain;
+			bestDist = d;
+		}
+		return best;
+	}
 
 	private onPointerDown = (e: PointerEvent) => {
 		// Primary button only (owner, polish round): a right-press must not
@@ -1043,6 +1085,8 @@ export class GraphCanvasRenderer {
 		if (this.dragId) return; // pointer capture keeps the drag alive
 		this.downPos = null;
 		this.setHover(null);
+		if (this.hoverEdgeChain !== null) this.callbacks.onEdgeHover?.(null, { x: 0, y: 0 });
+		this.hoverEdgeChain = null;
 	};
 
 	// ── Internals ──

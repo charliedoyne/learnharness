@@ -12,11 +12,16 @@ import type { GraphStore } from "../core/ports.ts";
 import { ModelsNotConfiguredError, ProviderKeyMissingError, ROLE_SLOT, type ModelSlotName, type ProviderKeyMissing } from "../core/settings.ts";
 import type { PiEngine } from "../agent/models.ts";
 import { runTidier } from "../agent/subagents/tidier.ts";
+import { explainChains, EXPLAINER_BATCH } from "../agent/subagents/chain-explainer.ts";
 import { withBgLlmSlot } from "../agent/subagents/bg-llm-semaphore.ts";
 import type { TidyState, TidyStore } from "../store/tidy.ts";
 
 export interface TidyStatus extends TidyState {
 	running: boolean;
+	/** The chain explainer is filling in missing "why" lines. */
+	explaining: boolean;
+	/** Chains with no "why" yet. */
+	unexplained: number;
 	/** The last run's failure, until the next run starts. */
 	error?: string;
 }
@@ -35,7 +40,8 @@ export interface GraphTidyDeps {
 	topicTitle: (sourceId: string) => string;
 	/** Test seam first, then the settings-resolved engine. */
 	tidier?: PiEngine;
-	engineFor?: (role: "tidier") => PiEngine | undefined;
+	explainer?: PiEngine;
+	engineFor?: (role: "tidier" | "explainer") => PiEngine | undefined;
 	providerKeyMissing?: (provider: string, tier: ModelSlotName) => ProviderKeyMissing | null;
 	/** True while an extraction may write the graph — applies wait. */
 	extractionRunning?: () => boolean;
@@ -51,10 +57,13 @@ export function createGraphTidy(deps: GraphTidyDeps) {
 	let running: Promise<void> | null = null;
 	let lastError: string | undefined;
 
-	function engine(): PiEngine {
-		const resolved = deps.tidier ?? deps.engineFor?.("tidier");
-		if (!resolved) throw new ModelsNotConfiguredError([ROLE_SLOT.tidier]);
-		const missing = deps.tidier ? null : deps.providerKeyMissing?.(resolved.model.provider, ROLE_SLOT.tidier);
+	let explaining: Promise<void> | null = null;
+
+	function engine(role: "tidier" | "explainer" = "tidier"): PiEngine {
+		const seam = role === "tidier" ? deps.tidier : deps.explainer;
+		const resolved = seam ?? deps.engineFor?.(role);
+		if (!resolved) throw new ModelsNotConfiguredError([ROLE_SLOT[role]]);
+		const missing = seam ? null : deps.providerKeyMissing?.(resolved.model.provider, ROLE_SLOT[role]);
 		if (missing) throw new ProviderKeyMissingError(missing.provider, missing.slots);
 		return resolved;
 	}
@@ -76,9 +85,47 @@ export function createGraphTidy(deps: GraphTidyDeps) {
 		console.info(`[tidy] ${proposals.length} proposal(s) over ${graph.nodes.length} proposition(s)`);
 	}
 
+	const unexplainedChains = () => getGraph(deps.graphStore).chains.filter((c) => !c.why);
+
+	/** Fill missing "why" lines batch by batch; each batch lands as it
+	 *  returns (a synchronous rewrite), so a failure keeps earlier ones. */
+	async function explainAll(explainer: PiEngine): Promise<void> {
+		const pending = unexplainedChains();
+		for (let i = 0; i < pending.length; i += EXPLAINER_BATCH) {
+			const graph = getGraph(deps.graphStore);
+			const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+			const batch = pending.slice(i, i + EXPLAINER_BATCH).filter((c) => c.premises.every((p) => byId.has(p)) && byId.has(c.conclusion));
+			if (batch.length === 0) continue;
+			const whys = await withBgLlmSlot(undefined, () => explainChains({ engine: explainer, chains: batch, byId }));
+			const lines = deps.graphStore.readChains().map((line) => (line.why || !whys.has(line.id) ? line : { ...line, why: whys.get(line.id)! }));
+			deps.graphStore.rewriteLedgers({ chains: lines });
+		}
+	}
+
 	return {
 		status(): TidyStatus {
-			return { ...deps.store.read(), running: running !== null, ...(lastError ? { error: lastError } : {}) };
+			return {
+				...deps.store.read(),
+				running: running !== null,
+				explaining: explaining !== null,
+				unexplained: unexplainedChains().length,
+				...(lastError ? { error: lastError } : {}),
+			};
+		},
+
+		/** Start filling in missing chain explanations (cheap slot). */
+		explain(): { started: boolean } {
+			if (explaining) return { started: false };
+			const explainer = engine("explainer");
+			lastError = undefined;
+			explaining = explainAll(explainer)
+				.then(() => deps.onApplied?.({ applied: 0, skipped: 0, failed: [], removedNodeIds: [], createdNodeIds: [] }))
+				.catch((err: unknown) => {
+					lastError = err instanceof Error ? err.message : String(err);
+					console.error("[tidy] explaining chains failed:", err);
+				})
+				.finally(() => { explaining = null; });
+			return { started: true };
 		},
 
 		/** Start a run (engine refusals throw now, so the route can answer
@@ -99,6 +146,7 @@ export function createGraphTidy(deps: GraphTidyDeps) {
 		/** Wait for the current run (tests). */
 		async settled(): Promise<void> {
 			await running;
+			await explaining;
 		},
 
 		/** Apply or skip pending proposals, in the order given. Applies run

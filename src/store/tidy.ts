@@ -20,7 +20,7 @@ export interface TidyStore {
 	write(state: TidyState): void;
 }
 
-const KINDS = new Set(["merge", "split", "connect"]);
+const KINDS = new Set(["merge", "split", "connect", "rename"]);
 const STATUSES = new Set(["pending", "applied", "skipped"]);
 
 function isProposal(v: unknown): v is TidyProposal {

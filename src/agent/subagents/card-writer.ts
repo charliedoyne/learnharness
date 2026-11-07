@@ -98,7 +98,7 @@ export function propositionContext(node: GraphNode, chains: ReadonlyArray<GraphC
 	const lines = [`[${node.id}] ${node.name}`, `Statement: ${node.statement}`];
 	if (node.aliases.length > 0) lines.push(`Also phrased: ${node.aliases.join(" | ")}`);
 	const concluding = chains.filter((c) => c.conclusion === node.id);
-	for (const chain of concluding) lines.push(`Follows from (jointly): ${chain.premises.map(label).join(" + ")}`);
+	for (const chain of concluding) lines.push(`Follows from (jointly): ${chain.premises.map(label).join(" + ")}${chain.why ? ` (because ${chain.why})` : ""}`);
 	const serving = chains.filter((c) => c.premises.includes(node.id));
 	for (const chain of serving) {
 		const others = chain.premises.filter((p) => p !== node.id);

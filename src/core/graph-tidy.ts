@@ -42,7 +42,8 @@ export interface TidyIdea {
 export type TidyChange =
 	| { kind: "merge"; keep: string; drop: string }
 	| { kind: "split"; node: string; parts: TidyIdea[] }
-	| { kind: "connect"; premises: string[]; conclusion?: string; newIdea?: TidyIdea };
+	| { kind: "connect"; premises: string[]; conclusion?: string; newIdea?: TidyIdea; why?: string }
+	| { kind: "rename"; node: string; name: string };
 
 export type TidyStatus = "pending" | "applied" | "skipped";
 
@@ -76,6 +77,13 @@ export function tidyProblem(change: TidyChange, nodes: ReadonlyMap<string, Graph
 		case "merge":
 			if (change.keep === change.drop) return "a node cannot merge with itself";
 			return missing(change.keep) ?? missing(change.drop);
+		case "rename": {
+			const gone = missing(change.node);
+			if (gone) return gone;
+			if (change.name.trim() === "") return "a new name cannot be empty";
+			if (change.name.trim() === nodes.get(change.node)!.name) return "the name is unchanged";
+			return null;
+		}
 		case "split": {
 			const gone = missing(change.node);
 			if (gone) return gone;
@@ -188,6 +196,17 @@ export function applyTidyChange(graphStore: GraphStore, change: TidyChange, now 
 			}
 			return { removedNodeIds: [change.drop], createdNodeIds: [], chainsAdded: 0 };
 		}
+		case "rename": {
+			// The node's FIRST line defines its name (getGraph): rename that one.
+			let renamed = false;
+			const lines = graphStore.readNodes().map((line) => {
+				if (renamed || line.id !== change.node) return line;
+				renamed = true;
+				return { ...line, name: change.name.trim() };
+			});
+			graphStore.rewriteLedgers({ nodes: lines });
+			return { removedNodeIds: [], createdNodeIds: [], chainsAdded: 0 };
+		}
 		case "split": {
 			const original = nodes.get(change.node)!;
 			const provenance = sourcePoints(original.provenance);
@@ -220,7 +239,8 @@ export function applyTidyChange(graphStore: GraphStore, change: TidyChange, now 
 				conclusion = idea.id;
 				created.push(idea.id);
 			}
-			graphStore.appendChain({ id: newGraphChainId(), premises: [...new Set(change.premises)], conclusion, createdAt: now, provenance });
+			const why = change.why?.trim();
+			graphStore.appendChain({ id: newGraphChainId(), premises: [...new Set(change.premises)], conclusion, createdAt: now, provenance, ...(why ? { why } : {}) });
 			return { removedNodeIds: [], createdNodeIds: created, chainsAdded: 1 };
 		}
 	}

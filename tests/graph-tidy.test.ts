@@ -130,6 +130,21 @@ describe("core/graph-tidy apply", () => {
 		assert.equal(rehomeTidyConnections(store), 0);
 	});
 
+	it("rename changes the name on the node's defining line", () => {
+		const { store } = memoryStore([...NODES, { ...NODES[1]!, name: "later line", statement: "Later phrasing." }], CHAINS);
+		applyTidyChange(store, { kind: "rename", node: "n_wid", name: "West India Docks opened 1802" });
+		const wid = getGraph(store).nodes.find((n) => n.id === "n_wid")!;
+		assert.equal(wid.name, "West India Docks opened 1802");
+		assert.ok(wid.aliases.includes("Later phrasing."));
+		assert.throws(() => applyTidyChange(store, { kind: "rename", node: "n_wid", name: "West India Docks opened 1802" }), /unchanged/);
+	});
+
+	it("a connection keeps its reason as the chain's why", () => {
+		const { store } = memoryStore(NODES, CHAINS);
+		applyTidyChange(store, { kind: "connect", premises: ["n_abol2"], conclusion: "n_merch", why: "Both turn on 1834." });
+		assert.equal(getGraph(store).chains.find((c) => c.conclusion === "n_merch" && c.premises[0] === "n_abol2")?.why, "Both turn on 1834.");
+	});
+
 	it("refuses what no longer fits", () => {
 		const nodes = new Map(NODES.map((n) => [n.id, n]));
 		assert.match(tidyProblem({ kind: "merge", keep: "n_wid", drop: "n_gone" }, nodes, CHAINS) ?? "", /no longer exists/);
@@ -227,6 +242,22 @@ describe("tidy service", () => {
 		await tidy.settled();
 		assert.ok(tidy.status().error, "the failure is kept for the panel");
 		assert.equal(tidy.status().proposals.length, 0);
+	});
+});
+
+describe("chain explainer", () => {
+	it("fills in a why for every chain that has none, and keeps existing ones", async () => {
+		const { store } = memoryStore(NODES, [{ ...CHAINS[0]!, why: "Kept." }, CHAINS[1]!]);
+		const faux = createFauxCore({});
+		faux.setResponses([() => fauxAssistantMessage([fauxToolCall("submit_explanations", { explanations: [{ id: "arg_2", why: "The Act ended slavery that Sligo then oversaw." }] } as ToolCall["arguments"], { id: "e1" })], { stopReason: "toolUse" })]);
+		const tidy = createGraphTidy({ graphStore: store, store: createTidyStore(tmpFile("tidy.json")), topicTitle: (id) => id, explainer: { model: faux.getModel(), streamFn: faux.streamSimple } });
+		assert.equal(tidy.status().unexplained, 1);
+		assert.deepEqual(tidy.explain(), { started: true });
+		await tidy.settled();
+		const chains = getGraph(store).chains;
+		assert.equal(chains.find((c) => c.id === "arg_1")?.why, "Kept.");
+		assert.equal(chains.find((c) => c.id === "arg_2")?.why, "The Act ended slavery that Sligo then oversaw.");
+		assert.equal(tidy.status().unexplained, 0);
 	});
 });
 

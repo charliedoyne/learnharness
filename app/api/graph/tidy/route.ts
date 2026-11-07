@@ -2,6 +2,7 @@
  * Tidy graph (src/server/graph-tidy.ts):
  *   GET                                  → TidyStatus (running, proposals)
  *   POST {action: "run"}                 → 202 started (409 when already running)
+ *   POST {action: "explain"}             → 202 started: fill missing chain "why" lines
  *   POST {action: "apply"|"skip", ids}   → TidyResolveResult
  */
 
@@ -25,6 +26,14 @@ export async function POST(request: Request) {
 		try {
 			const { started } = graphTidy.start();
 			emit("activity-changed", {});
+			return Response.json({ started }, { status: started ? 202 : 409 });
+		} catch (err) {
+			return ankiSyncErrorResponse(err);
+		}
+	}
+	if (body.action === "explain") {
+		try {
+			const { started } = graphTidy.explain();
 			return Response.json({ started }, { status: started ? 202 : 409 });
 		} catch (err) {
 			return ankiSyncErrorResponse(err);

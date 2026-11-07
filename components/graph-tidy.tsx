@@ -13,6 +13,8 @@ import type { GraphNode, TidyProposal } from "@/src/core";
 
 interface TidyStatusBody {
 	running: boolean;
+	explaining?: boolean;
+	unexplained?: number;
 	error?: string;
 	runAt?: string;
 	proposals: TidyProposal[];
@@ -27,6 +29,8 @@ export function describeTidy(proposal: TidyProposal, names: ReadonlyMap<string, 
 	switch (change.kind) {
 		case "merge":
 			return { title: `Merge ${name(change.drop)} into ${name(change.keep)}` };
+		case "rename":
+			return { title: `Rename ${name(change.node)} to ${quote(change.name)}` };
 		case "split":
 			return { title: `Split ${name(change.node)}`, detail: change.parts.map((p) => p.name).join(" · ") };
 		case "connect": {
@@ -37,8 +41,8 @@ export function describeTidy(proposal: TidyProposal, names: ReadonlyMap<string, 
 	}
 }
 
-const KIND_ORDER = { connect: 0, merge: 1, split: 2 } as const;
-const KIND_HEADING = { connect: "Connections", merge: "Same idea twice", split: "Bundled ideas" } as const;
+const KIND_ORDER = { connect: 0, merge: 1, split: 2, rename: 3 } as const;
+const KIND_HEADING = { connect: "Connections", merge: "Same idea twice", split: "Bundled ideas", rename: "Clearer names" } as const;
 
 export function TidyGraphButton({ nodes }: { nodes: GraphNode[] }) {
 	const [open, setOpen] = useState(false);
@@ -47,11 +51,17 @@ export function TidyGraphButton({ nodes }: { nodes: GraphNode[] }) {
 	const [busy, setBusy] = useState(false);
 	const names = new Map(nodes.map((n) => [n.id, n.name]));
 	const panelRef = useRef<HTMLDivElement>(null);
+	const wasExplaining = useRef(false);
 
 	const load = useCallback(async () => {
 		try {
 			const response = await fetch("/api/graph/tidy", { cache: "no-store" });
-			if (response.ok) setStatus((await response.json()) as TidyStatusBody);
+			if (!response.ok) return;
+			const next = (await response.json()) as TidyStatusBody;
+			// Explanations landed: the chains view and canvas re-read the graph.
+			if (wasExplaining.current && !next.explaining) window.dispatchEvent(new CustomEvent("lh:graph-revision", { detail: {} }));
+			wasExplaining.current = next.explaining === true;
+			setStatus(next);
 		} catch {
 			/* the panel keeps its last read */
 		}
@@ -61,14 +71,14 @@ export function TidyGraphButton({ nodes }: { nodes: GraphNode[] }) {
 		if (open) void load();
 	}, [open, load]);
 	useEffect(() => {
-		if (!open || !status?.running) return;
+		if (!open || !(status?.running || status?.explaining)) return;
 		const timer = setInterval(() => void load(), 2000);
 		return () => clearInterval(timer);
-	}, [open, status?.running, load]);
+	}, [open, status?.running, status?.explaining, load]);
 
-	const run = async () => {
+	const run = async (action: "run" | "explain" = "run") => {
 		setNote("");
-		const response = await fetch("/api/graph/tidy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "run" }) });
+		const response = await fetch("/api/graph/tidy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
 		if (!response.ok && response.status !== 409) {
 			const body = (await response.json().catch(() => ({}))) as { error?: string; message?: string };
 			setNote(body.error ?? body.message ?? "Could not start the tidy pass. Check the Strong model in Settings.");
@@ -117,6 +127,18 @@ export function TidyGraphButton({ nodes }: { nodes: GraphNode[] }) {
 				>
 					<div className="flex items-center gap-2 border-b px-3 py-2">
 						<span className="flex-1 font-medium">Tidy graph</span>
+						{(status?.explaining || (status?.unexplained ?? 0) > 0) && (
+							<button
+								type="button"
+								data-testid="tidy-graph-explain"
+								disabled={status?.explaining}
+								title="Write a one-line reason for each chain that has none (cheap model)"
+								onClick={() => void run("explain")}
+								className="rounded-lg border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+							>
+								{status?.explaining ? "Explaining…" : `Explain ${status?.unexplained} chains`}
+							</button>
+						)}
 						<button
 							type="button"
 							data-testid="tidy-graph-run"

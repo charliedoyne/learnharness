@@ -248,7 +248,8 @@ export function mergeFindings(
 		const key = chainKey(premises, conclusion);
 		if (assertedByChat.has(key)) return; // this chat already asserted this argument
 		const id = idOfKey.get(key) ?? newGraphChainId();
-		ledgers.appendChain({ id, premises, conclusion, createdAt: now, provenance: pointOf(chatId) });
+		const why = chain.why?.trim();
+		ledgers.appendChain({ id, premises, conclusion, createdAt: now, provenance: pointOf(chatId), ...(why ? { why } : {}) });
 		idOfKey.set(key, id);
 		assertedByChat.add(key);
 		stats.chains!++;
@@ -432,6 +433,8 @@ export function getGraph(graphStore: Pick<GraphStore, "readNodes" | "readChains"
 			for (const pt of line.provenance) {
 				if (!existing.provenance.some((q) => samePoint(q, pt))) existing.provenance.push(pt);
 			}
+			// The first explanation stands; a later line fills a missing one.
+			if (existing.why === undefined && line.why) existing.why = line.why;
 		} else {
 			const chain: GraphChain = { ...line, premises: [...line.premises], provenance: [...line.provenance] };
 			byKey.set(key, chain);
