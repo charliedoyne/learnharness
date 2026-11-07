@@ -103,3 +103,7 @@ Additional runtime gates have prerequisites:
 | Other `scripts/smoke-*.mjs` | Standalone/native renderers, image workers, demo helper, compression, file paths, opening. Read each script and the [release guide](desktop-release.md) before running. |
 
 Run checks proportionate to the change. Offline gates prove exercised contracts, not live entitlements or model-authored lesson quality.
+
+## Desktop icon (macOS)
+
+`zsh scripts/mac/install-launcher.sh` puts a **LearnHarness** icon on the Desktop and in `~/Applications`. Each click stops a copy already running from this clone, pulls the latest `main` from `origin`, runs `npm install` if the lockfile changed, and starts `npm run desktop:dev` in the background. Data and keys live in `~/Library/Application Support/LearnHarness` (`LH_DATA_DIR`, `LH_AUTH_FILE`), so updating or restarting never touches them. Closing the window quits the app. The log is `~/Library/Logs/LearnHarness/launcher.log`.
