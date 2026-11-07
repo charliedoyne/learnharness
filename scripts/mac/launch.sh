@@ -63,6 +63,23 @@ if [[ ! -d node_modules || "$(shasum package-lock.json 2>/dev/null)" != "$lock_b
 	npm install || fail "npm install failed."
 fi
 
+# 3b. The dev window runs the stock Electron.app from node_modules, which
+#     would show as "Electron" with Electron's icon. Rename it and give it
+#     the LearnHarness icon (redone after each npm install, which resets it),
+#     then re-sign it ad hoc, since Apple silicon refuses an edited bundle.
+ELECTRON_APP="$REPO/node_modules/electron/dist/Electron.app"
+PLIST="$ELECTRON_APP/Contents/Info.plist"
+if [[ -f "$PLIST" && "$(/usr/libexec/PlistBuddy -c "Print :CFBundleName" "$PLIST" 2>/dev/null)" != "LearnHarness" ]]; then
+	cp "$REPO/build/icon.icns" "$ELECTRON_APP/Contents/Resources/electron.icns"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleName LearnHarness" "$PLIST"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName LearnHarness" "$PLIST" 2>/dev/null \
+		|| /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string LearnHarness" "$PLIST"
+	codesign --force --deep --sign - "$ELECTRON_APP" || echo "codesign failed"
+	touch "$ELECTRON_APP"
+	/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$ELECTRON_APP" >/dev/null 2>&1 || true
+	echo "branded Electron.app"
+fi
+
 # 4. Start, detached from this script. Next first; the window only once
 #    the first page has compiled (Electron's dev shell loads its URL once,
 #    so an early window stays blank). Closing the window stops Next.
