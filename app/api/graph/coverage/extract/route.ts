@@ -9,8 +9,11 @@
  * trigger fires, just user-initiated. 409 while a run is already in
  * flight (the dock is the source of truth for that); failures are logged
  * by the pipeline and leave coverage untouched — the button stays honest.
+ *
+ * {chatId, fresh: true} re-reads a fully extracted session under the
+ * current extractor (manualExtract): coverage is reset, propositions kept.
  */
-import { extraction, extractionStatuses } from "@/src/server";
+import { extractionStatuses, manualExtract } from "@/src/server";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +25,7 @@ export async function POST(request: Request) {
 		return Response.json({ error: "Invalid JSON body" }, { status: 400 });
 	}
 	const chatId = (body as { chatId?: unknown }).chatId;
+	const fresh = (body as { fresh?: unknown }).fresh === true;
 	if (typeof chatId !== "string" || chatId === "") {
 		return Response.json({ error: 'Body must be {chatId: string}' }, { status: 400 });
 	}
@@ -30,7 +34,7 @@ export async function POST(request: Request) {
 	}
 	// Fire-and-forget, like the trigger: the dock + the coverage panel's
 	// running flags track progress; the promise never blocks the response.
-	void extraction.runExtraction(chatId).catch((err: unknown) => {
+	void manualExtract(chatId, fresh).catch((err: unknown) => {
 		console.error(`[chat ${chatId}] manual extraction failed:`, err);
 	});
 	return Response.json({ started: true }, { status: 202 });

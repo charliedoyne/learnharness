@@ -115,7 +115,7 @@ describe("CoverageMenuBody — the context-menu block", () => {
 		assert.ok(!html.includes('disabled=""'), "an uncovered session can extract (the disabled: utilities alone don't count)");
 	});
 
-	it("fully extracted: the quiet line, Extract disabled (never a fake run)", () => {
+	it("fully extracted: the quiet line, and Re-read in place of Extract", () => {
 		const html = renderToStaticMarkup(
 			<CoverageMenuBody
 				coverage={coverage({ uncoveredTokens: 0, uncoveredCount: 0 })}
@@ -124,7 +124,8 @@ describe("CoverageMenuBody — the context-menu block", () => {
 			/>,
 		);
 		assert.match(html, /fully extracted/);
-		assert.ok(html.includes("disabled"), "nothing to run — the button rests");
+		assert.match(html, /Re-read/, "a covered session can be read again under the current extractor");
+		assert.ok(!html.includes('disabled=""'), "Re-read is live");
 	});
 
 	it("running: the pulse line + 'Running', not the numbers (motion is the state)", () => {

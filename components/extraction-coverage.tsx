@@ -83,12 +83,12 @@ export async function fetchGraphRead(): Promise<GraphRead | null> {
  *  run is already in flight) — returns "running" so the caller flips to the
  *  optimistic/running state instead of an error. Returns false only on a
  *  real failure, where the caller reverts. */
-async function requestExtract(chatId: string): Promise<boolean> {
+async function requestExtract(chatId: string, fresh = false): Promise<boolean> {
 	try {
 		const res = await fetch("/api/graph/coverage/extract", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ chatId }),
+			body: JSON.stringify(fresh ? { chatId, fresh } : { chatId }),
 		});
 		if (!res.ok && res.status !== 409) return false;
 		return true; // 202 started, or 409 already-running — both "running"
@@ -157,7 +157,10 @@ export function CoverageMenuBlock({ chatId }: { chatId: string }) {
 		// response; a 409 means one is already in flight) — refresh so the
 		// run surfaces at once either way.
 		refreshActivity();
-		const started = await requestExtract(chatId);
+		// A fully extracted session RE-READS (fresh): the server resets its
+		// coverage and the extractor adds what the earlier run missed.
+		const complete = coverage.uncoveredTokens === 0 && coverage.uncoveredCount === 0;
+		const started = await requestExtract(chatId, complete);
 		if (!started) setExtracting(false);
 		void load();
 	};
@@ -208,10 +211,11 @@ export function CoverageMenuBody({
 				type="button"
 				data-testid="ctx-extract"
 				onClick={onExtract}
-				disabled={busy || complete}
+				disabled={busy}
+				title={complete ? "Read this session again with the current extractor and add anything it missed" : undefined}
 				className="flex items-center justify-center rounded-lg border px-2 py-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
 			>
-				{busy ? "Running" : "Extract"}
+				{busy ? "Running" : complete ? "Re-read" : "Extract"}
 			</button>
 		</div>
 	);

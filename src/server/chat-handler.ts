@@ -171,6 +171,23 @@ function autoSyncAnki(): void {
 	});
 }
 
+/** The manual extraction affordance (POST /api/graph/coverage/extract).
+ *  `fresh` RE-READS an already-extracted session under the current
+ *  extractor prompt: the session's coverage lines are dropped first, so
+ *  every message is uncovered again. Its existing propositions stay — the
+ *  extractor sees them as THE GRAPH SO FAR and the merger folds repeats —
+ *  so a re-read only ADDS what the earlier run missed. New propositions
+ *  are carded like a triggered run's when Anki sync is on. */
+export async function manualExtract(chatId: string, fresh = false) {
+	if (fresh) {
+		const coverage = stores.graphStore.readCoverage();
+		stores.graphStore.rewriteLedgers({ coverage: coverage.filter((entry) => entry.chatId !== chatId) });
+	}
+	const stats = await extraction.runExtraction(chatId);
+	if (stats.nodes > 0 && effectiveSettings().graph.ankiSync) autoSyncAnki();
+	return stats;
+}
+
 
 // Wake-pipeline wiring (contracts.ts "THE ASYNC PROTOCOL" §4): the pipeline
 // delivers its steers through THIS composition root (one event: the steer
