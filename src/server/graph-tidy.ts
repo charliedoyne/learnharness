@@ -13,7 +13,6 @@ import { ModelsNotConfiguredError, ProviderKeyMissingError, ROLE_SLOT, type Mode
 import type { PiEngine } from "../agent/models.ts";
 import { runTidier } from "../agent/subagents/tidier.ts";
 import { explainChains, EXPLAINER_BATCH } from "../agent/subagents/chain-explainer.ts";
-import { withBgLlmSlot } from "../agent/subagents/bg-llm-semaphore.ts";
 import type { TidyState, TidyStore } from "../store/tidy.ts";
 
 export interface TidyStatus extends TidyState {
@@ -70,8 +69,7 @@ export function createGraphTidy(deps: GraphTidyDeps) {
 
 	async function runOnce(tidierEngine: PiEngine): Promise<void> {
 		const graph = getGraph(deps.graphStore);
-		const found = await withBgLlmSlot(undefined, () =>
-			runTidier({ engine: tidierEngine, nodes: graph.nodes, chains: graph.chains, topicTitle: deps.topicTitle }));
+		const found = await runTidier({ engine: tidierEngine, nodes: graph.nodes, chains: graph.chains, topicTitle: deps.topicTitle });
 		const runAt = now();
 		const history = deps.store.read().proposals.filter((p) => p.status !== "pending");
 		const proposals: TidyProposal[] = found.map((p) => ({
@@ -96,7 +94,7 @@ export function createGraphTidy(deps: GraphTidyDeps) {
 			const byId = new Map(graph.nodes.map((n) => [n.id, n]));
 			const batch = pending.slice(i, i + EXPLAINER_BATCH).filter((c) => c.premises.every((p) => byId.has(p)) && byId.has(c.conclusion));
 			if (batch.length === 0) continue;
-			const whys = await withBgLlmSlot(undefined, () => explainChains({ engine: explainer, chains: batch, byId }));
+			const whys = await explainChains({ engine: explainer, chains: batch, byId });
 			const lines = deps.graphStore.readChains().map((line) => (line.why || !whys.has(line.id) ? line : { ...line, why: whys.get(line.id)! }));
 			deps.graphStore.rewriteLedgers({ chains: lines });
 		}

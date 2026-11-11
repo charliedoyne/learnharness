@@ -32,7 +32,6 @@ import type { GraphNode } from "../core/contracts.ts";
 import { ModelsNotConfiguredError, ProviderKeyMissingError, ROLE_SLOT, type ModelSlotName, type ProviderKeyMissing } from "../core/settings.ts";
 import type { PiEngine } from "../agent/models.ts";
 import { CARD_WRITER_BATCH, writeCards } from "../agent/subagents/card-writer.ts";
-import { withBgLlmSlot } from "../agent/subagents/bg-llm-semaphore.ts";
 
 // ─── AnkiConnect (https://git.foosoft.net/alex/anki-connect, API v6) ────────
 
@@ -167,7 +166,7 @@ export function createAnkiSync(deps: AnkiSyncDeps): AnkiSync {
 		let carded = 0;
 		for (let i = 0; i < nodes.length; i += CARD_WRITER_BATCH) {
 			const batch = nodes.slice(i, i + CARD_WRITER_BATCH);
-			const cards = await withBgLlmSlot(undefined, () => writeCards({ engine, nodes: batch, chains, byId }));
+			const cards = await writeCards({ engine, nodes: batch, chains, byId });
 			const records: AnkiNoteRecord[] = batch.flatMap((node) => {
 				const nodeCards = cards.get(node.id);
 				const sourceId = birthSource(node);

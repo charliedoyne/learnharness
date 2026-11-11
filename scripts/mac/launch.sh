@@ -7,7 +7,8 @@
 #   1. stops a running copy started from this clone
 #   2. pulls the latest main from origin (skipped, with a notice, if the
 #      clone has local changes or no network)
-#   3. runs npm install when package-lock.json changed
+#   3. runs npm install (and the plugins' setup) when a lockfile changed,
+#      and rebuilds the bundled plugins when the code changed
 #   4. starts Next, waits for it, then opens the window; closing the window
 #      quits it
 #
@@ -55,7 +56,9 @@ if stop_running ; then
 fi
 
 # 2. Latest code.
-lock_before="$(shasum package-lock.json 2>/dev/null)"
+locks() { cat package-lock.json plugins/*/package-lock.json 2>/dev/null | shasum; }
+lock_before="$(locks)"
+head_before="$(git rev-parse HEAD 2>/dev/null)"
 if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
 	notify "Local changes in the code folder, so updates were skipped this time."
 	echo "skipped pull: local changes"
@@ -66,9 +69,17 @@ else
 fi
 
 # 3. Dependencies, only when they changed.
-if [[ ! -d node_modules || "$(shasum package-lock.json 2>/dev/null)" != "$lock_before" ]]; then
+if [[ ! -d node_modules || "$(locks)" != "$lock_before" ]]; then
 	notify "Installing updates, this can take a minute…"
 	npm install || fail "npm install failed."
+	npm run plugins:setup || fail "Plugin setup failed."
+fi
+# 3a. Bundled plugins (upstream's npm run dev builds these before Next;
+#     this launcher starts Next directly, so it builds them here). Only
+#     when the code changed or they were never built: about 10 seconds.
+if [[ ! -d core-plugins || ! -d plugins/coding-questions/node_modules || "$(git rev-parse HEAD 2>/dev/null)" != "$head_before" ]]; then
+	[[ -d plugins/coding-questions/node_modules ]] || npm run plugins:setup || fail "Plugin setup failed."
+	npm run plugins:build-core && npm run plugins:build-authoring || fail "Building the bundled plugins failed."
 fi
 
 # 3b. The window runs as ~/Applications/LearnHarness.app (a renamed
