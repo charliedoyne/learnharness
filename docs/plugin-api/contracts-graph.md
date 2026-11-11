@@ -180,6 +180,7 @@ export interface GraphChain {
     id: string;
     premises: string[];
     conclusion: string;
+    why?: string;
     provenance: ProvenancePoint[];
     createdAt: string;
 }
@@ -192,6 +193,7 @@ export interface GraphChain {
 - [id](#graphchain-id)
 - [premises](#graphchain-premises)
 - [conclusion](#graphchain-conclusion)
+- [why](#graphchain-why)
 - [provenance](#graphchain-provenance)
 - [createdAt](#graphchain-createdat)
 
@@ -218,6 +220,16 @@ The node id the premises jointly imply.
 
 ```ts
 conclusion: string;
+```
+
+### GraphChain why
+
+One sentence on HOW the premises give the conclusion (fork,
+2026-11-07): written by the extractor or the tidier, or filled in
+later by the chain explainer. Absent on older chains.
+
+```ts
+why?: string;
 ```
 
 ### GraphChain provenance

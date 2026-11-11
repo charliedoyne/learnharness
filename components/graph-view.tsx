@@ -1363,7 +1363,7 @@ export function GraphView({
 			logicalEdges: snapshot.logicalEdges.map((e) => ({ from: e.from, to: e.to })),
 			impLinks: snapshot.impLinks,
 			clusters: snapshot.clusters.map((c) => ({ id: c.id, label: c.label, members: c.members })),
-			edgeChains: new Map(snapshot.chains.filter((c) => c.premises.length === 1).map((c) => [`${c.premises[0]}>${c.conclusion}`, c.id])),
+			edgeChains: new Map((snapshot.chains ?? []).filter((c) => c.premises.length === 1).map((c) => [`${c.premises[0]}>${c.conclusion}`, c.id])),
 			colors: {
 				node: tokenHex(NODE_COLOR_TOKEN),
 				edge: tokenHex("--muted-foreground"),
@@ -1453,7 +1453,7 @@ export function GraphView({
 					    right-click position (canvas-relative == container-relative,
 					    the canvas fills this div). */}
 					{edgeTip !== null && (() => {
-						const chain = snapshot?.chains.find((c) => c.id === edgeTip.chainId);
+						const chain = snapshot?.chains?.find((c) => c.id === edgeTip.chainId);
 						if (!chain) return null;
 						const name = (id: string) => snapshot?.propositions.find((n) => n.id === id)?.name ?? id;
 						return (
